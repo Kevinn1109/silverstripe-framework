@@ -1056,7 +1056,14 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
             $parentIDs = $topLevelIDs;
             $parentRelationData = $query;
             $chainToDate = [];
+            $polymorphicEncountered = false;
             foreach (explode('.', $relationChain) as $relationName) {
+                if ($polymorphicEncountered) {
+                    $polymorphicRelation = $chainToDate[array_key_last($chainToDate)];
+                    throw new InvalidArgumentException(
+                        "Invalid relation passed to eagerLoad() - $relationChain. Further nested relations are not supported after polymorphic has_one relation $polymorphicRelation."
+                    );
+                }
                 /** @var Query|array<DataObject|EagerLoadedList> $parentRelationData */
                 $chainToDate[] = $relationName;
                 list(
@@ -1075,6 +1082,9 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
                             $relationName,
                             $relationType
                         );
+                        if ($relationComponent['joinClass']) {
+                            $polymorphicEncountered = true;
+                        }
                         break;
                     case 'belongs_to':
                         list($parentRelationData, $parentIDs) = $this->fetchEagerLoadBelongsTo(
@@ -1206,6 +1216,10 @@ class DataList extends ViewableData implements SS_List, Filterable, Sortable, Li
         // into the has_one components - DataObject does that for us in getComponent() without any extra
         // db calls.
 
+        // fetchEagerLoadRelations expects these to be flat arrays if the relation is not polymorphic
+        if (!$hasOneClassField) {
+            return [$fetchedRecords, $fetchedIDs[$relationDataClass] ?? []];
+        }
         return [$fetchedRecords, $fetchedIDs];
     }
 
